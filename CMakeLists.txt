@@ -8,16 +8,17 @@ project(event_processor)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  Eigen3
   geometry_msgs
   roscpp
   rospy
   std_msgs
-  prophesee_event_msgs
 )
-find_package(
-  OpenCV
-)
+find_package(Eigen3)
+find_package(OpenCV)
+
+#set(prophesee_event_msgs_DIR /home/chenyu/prophsee_ws/devel/share/prophesee_event_msgs/cmake)
+find_package(prophesee_event_msgs)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -124,7 +125,7 @@ include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
 )
-
+#include_directories(/home/chenyu/prophsee_ws/devel/include)
 include_directories(
   include/${PROJECT_NAME}
   ${catkin_INCLUDE_DIRS}
@@ -161,6 +162,7 @@ add_dependencies(event_debug ${catkin_EXPORTED_TARGETS})
 #   ${catkin_LIBRARIES}
 # )
 target_link_libraries(event_debug ${catkin_LIBRARIES} ${OpenCV_LIBS})
+
 
 #############
 ## Install ##
