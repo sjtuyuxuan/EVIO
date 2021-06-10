@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  prophesee_event_msgs
 )
 find_package(Eigen3)
 find_package(OpenCV)
@@ -145,7 +146,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/event_processor_node.cpp)
-add_executable(event_debug src/event_debug.cpp src/preprocessor.cpp src/frame.cpp)
+add_executable(event_debug src/event_debug.cpp src/preprocessor.cpp src/frame.cpp src/util.cpp)
 add_dependencies(event_debug ${catkin_EXPORTED_TARGETS})
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

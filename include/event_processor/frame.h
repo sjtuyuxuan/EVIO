@@ -2,7 +2,7 @@
 #define EVIO_FRAME_H_
 
 #include "evio.h"
-#include "preprocessor.h"
+#include "util.h"
 
 #include <boost/functional/hash.hpp>
 #include <deque>
@@ -15,124 +15,8 @@ typedef std::pair<uint16_t, uint16_t> uvpair;
 namespace EVIO {
 namespace FrontEnd {
 
-struct EventProcessed
-{
-  EventProcessed() = default;
-  EventProcessed(const double ts, const float x, const float y, const bool p)
-      : time_stemp_(ts), x_(x), y_(y), polarity_(p){};
-  double time_stemp_;
-  float x_;
-  float y_;
-  bool polarity_;
-};
-
-struct MapWarp
-{
-  float x_;
-  float y_;
-  Eigen::Matrix<float, 2, 3> j_rot_;
-  Eigen::Matrix<float, 2, 3> j_trans_;
-};
-
 int GenMapWarp(const Eigen::Matrix3d intrinsic_mat,
                std::unordered_map<uvpair, MapWarp, boost::hash<uvpair>>& map);
-
-struct JRot
-{
-  double fx, fy, cx, cy;
-  double temp_1_fx2, temp_2cx, temp_cx2;
-  double temp_1_fy2, temp_2cy, temp_cy2;
-
-  JRot() = delete;
-  JRot(const Eigen::Matrix3d& intrinsic_mat)
-      : fx(intrinsic_mat(0, 0)), fy(intrinsic_mat(1, 1)),
-        cx(intrinsic_mat(0, 2)), cy(intrinsic_mat(1, 2)) {
-    temp_1_fx2 = 1 / (fx * fx);
-    temp_2cx   = 2 * cx;
-    temp_cx2   = cx * cx;
-    temp_1_fy2 = 1 / (fy * fy);
-    temp_2cy   = 2 * cy;
-    temp_cy2   = cy * cy;
-  }
-  Eigen::Matrix<double, 2, 3> operator()(uint16_t u, uint16_t v) {
-    Eigen::Matrix<double, 2, 3> rtn;
-    rtn << 0, -(1 + temp_1_fx2 * (u * u - temp_2cx * u + temp_cx2)),
-        -(v - cy) / fy, (1 + temp_1_fy2 * (v * v - temp_2cy * v + temp_cy2)), 0,
-        (u - cx) / fx;
-    rtn.block<1, 3>(0, 0) *= fx;
-    rtn.block<1, 3>(1, 0) *= fy;
-    return rtn;
-  }
-};
-
-struct JTrans
-{
-  double fx, fy, cx, cy;
-  JTrans() = delete;
-  JTrans(const Eigen::Matrix3d& intrinsic_mat)
-      : fx(intrinsic_mat(0, 0)), fy(intrinsic_mat(1, 1)),
-        cx(intrinsic_mat(0, 2)), cy(intrinsic_mat(1, 2)) {}
-  Eigen::Matrix<double, 2, 3> operator()(uint16_t u, uint16_t v) {}
-};
-
-struct PatchInfo
-{
-};
-
-
-class PoseManager {
- public:
-  using Ptr = std::shared_ptr<PoseManager>;
-
-  PoseManager() = default;
-  PoseManager(GTData::Ptr pose) {
-    oldest_time_ = pose->time_stamp_;
-    lateset_time_ = pose->time_stamp_;
-    pose_.emplace_back(pose);
-  }
-
-  int OnPose(std::deque<GTData::Ptr>& pose) {
-    while (!pose.empty()){
-      pose_.emplace_back(pose.front());
-      if (pose.front()->time_stamp_ < lateset_time_) {
-        return TIME_INVERSE;
-      } else if (pose.front()->time_stamp_ > lateset_time_ + 0.05) {
-        return HUGE_GAP;
-      } else {
-        lateset_time_ = pose.front()->time_stamp_;
-      }
-      pose.pop_front();
-    }
-    return SUCC;
-  }
-
-  int GetPose (const double time_stamp, Eigen::Affine3d& pose) {
-    if (time_stamp < oldest_time_ || time_stamp > lateset_time_ ) {
-      return OUT_OF_RANGE;
-    } else {
-      int index = std::floor((time_stamp - oldest_time_) /
-          (lateset_time_ - oldest_time_) * (pose_.size() - 1));
-      while (pose_[index]->time_stamp_ > time_stamp) index--;
-      while (pose_[index + 1]->time_stamp_ < time_stamp) index++;
-      double ratio = (time_stamp - pose_[index]->time_stamp_) /
-          (pose_[index + 1]->time_stamp_ - pose_[index]->time_stamp_);
-      
-      pose = Eigen::Translation3d((1 - ratio) * pose_[index]->t +
-          ratio * pose_[index + 1]->t) *
-          pose_[index]->q.slerp(ratio, pose_[index + 1]->q);
-      return SUCC;
-    }
-  }
-
- private:
-  std::vector<GTData::Ptr> pose_;
-  double lateset_time_;
-  double oldest_time_;
-
-};
-
-
-
 
 class Grid {
  public:
@@ -211,13 +95,13 @@ class DBScan {
   using Ptr = std::shared_ptr<DBScan>;
 
   DBScan() = delete;
-  DBScan(EventKMs<EventProcessed>::Ptr event_kms, ClusterVector* result) :
-      result_(result) {
+  DBScan(EventKMs<EventProcessed>::Ptr event_kms, ClusterVector* result)
+      : result_(result) {
     for (EventProcessed event : event_kms->event_vector_) {
       dbpoint_list_.emplace_back(std::make_shared<DBPoint>(event));
       points_in_tree_.emplace_back(cv::Point2f(event.x_, event.y_));
     }
-    if (!points_in_tree_.empty()){
+    if (!points_in_tree_.empty()) {
       Kdtree_.build(cv::Mat(points_in_tree_).reshape(1),
                     cv::flann::KDTreeIndexParams(1),
                     cvflann::FLANN_DIST_EUCLIDEAN);
@@ -245,7 +129,8 @@ class DBScan {
   }
 
   void DFS(DBPoint::Ptr dbpoint, const int times) {
-    if (DBSCAN_DFS_DEPTH && times == DBSCAN_DFS_DEPTH) return;
+    if (DBSCAN_DFS_DEPTH && times == DBSCAN_DFS_DEPTH)
+      return;
     for (int index : dbpoint->reach_index_) {
       if (dbpoint_list_[index]->cluster_ == UNREACHED) {
         dbpoint_list_[index]->cluster_ = dbpoint->cluster_;
@@ -285,7 +170,8 @@ class DBScan {
   std::vector<DBPoint::Ptr> dbpoint_list_;
 };
 
-struct DBLine {
+struct DBLine
+{
   int size            = 0;
   float sum_x_        = 0;
   float sum_y_        = 0;
@@ -313,7 +199,7 @@ class Frame {
 
   int WarpRotation(
       const std::unordered_map<uvpair, MapWarp, boost::hash<uvpair>>& map);
-  
+
   int WarpRotation(
       const std::unordered_map<uvpair, MapWarp, boost::hash<uvpair>>& map,
       const Eigen::AngleAxisd& diff_pose_q);
