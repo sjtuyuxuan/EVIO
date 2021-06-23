@@ -12,12 +12,14 @@
 #define STATIONARY_EVENTS 10
 #define STATIONARY_IMU_GYRO 0.04
 #define STATIONARY_IMU_ACC 0.3
-#define STATIONARY_GT_ROT 0.05
+#define STATIONARY_GT_ROT 0.1
 #define HEIGHT 480
 #define WIDTH 640
 #define ENVELOPE_K 40
 #define GRID_SIZE 20
-#define TIME_OFFSET 0
+
+#define TIME_OFFSET_IMU 0
+#define TIME_OFFSET_GT 0
 
 #define DOWNSAMPLE_SIZE 40000
 
@@ -28,7 +30,7 @@
 #define DBSCAN_DEVIDE_POLARITY 1
 #define DBSCAN_DFS_DEPTH 0
 
-#define USE_GT 1
+#define USE_GT 0
 #define ESTIMATE_OFFSET 1
 
 #endif

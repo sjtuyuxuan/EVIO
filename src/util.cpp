@@ -31,7 +31,6 @@ int PoseManager::GetPose(const double time_stamp, Eigen::Affine3d& pose) {
       index++;
     double ratio = (time_stamp - pose_[index]->time_stamp_) /
                    (pose_[index + 1]->time_stamp_ - pose_[index]->time_stamp_);
-
     pose = Eigen::Translation3d((1 - ratio) * pose_[index]->t +
                                 ratio * pose_[index + 1]->t) *
            pose_[index]->q.slerp(ratio, pose_[index + 1]->q);

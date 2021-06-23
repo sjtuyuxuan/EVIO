@@ -3,6 +3,7 @@
 #include "preprocessor.h"
 
 #include <boost/functional/hash.hpp>
+#include <fstream>
 #include <opencv/cv.h>
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -25,11 +26,13 @@ int PrintImage(EventKMs<EventRaw>::Ptr raw_event, Frame::Ptr frame) {
     std::cout << "ENOUGH" << std::endl;
     cv::RNG rng;
     cv::Mat debug_image_raw(HEIGHT, WIDTH, CV_8UC1, cv::Scalar(0));
-    cv::Mat debug_image_pro(HEIGHT, WIDTH, CV_8UC3, cv::Scalar(0, 0, 0));
+    cv::Mat debug_image_pro(HEIGHT, WIDTH, CV_8UC1, cv::Scalar(0));
     // cv::Mat debug_image_arrored_pos(HEIGHT, WIDTH, CV_8UC1, cv::Scalar(0));
     // cv::Mat debug_image_arrored_neg(HEIGHT, WIDTH, CV_8UC1, cv::Scalar(0));
     cv::Mat debug_image_cluster(HEIGHT, WIDTH, CV_8UC3, cv::Scalar(0, 0, 0));
     cv::Mat debug_image_cluster_neg(
+        HEIGHT, WIDTH, CV_8UC3, cv::Scalar(0, 0, 0));
+    cv::Mat debug_image_cluster_line(
         HEIGHT, WIDTH, CV_8UC3, cv::Scalar(0, 0, 0));
     for (EventRaw pixel : raw_event->event_vector_) {
       debug_image_raw.at<uint8_t>(pixel.y_, pixel.x_) =
@@ -37,16 +40,20 @@ int PrintImage(EventKMs<EventRaw>::Ptr raw_event, Frame::Ptr frame) {
                        (debug_image_raw.at<uint8_t>(pixel.y_, pixel.x_) + 83)),
                    static_cast<uint8_t>(255));
     }
+    std::ofstream f_out;
+    f_out.open("/mnt/750ssd_1/temp/" +
+               std::to_string(frame->undistorted_roation_warp_->time_start_) +
+               ".txt");
     for (EventProcessed pixel :
          frame->undistorted_roation_warp_->event_vector_) {
-      debug_image_pro.at<cv::Vec3b>(pixel.y_, pixel.x_)[0] +=
-          (pixel.time_stemp_ - frame->undistorted_roation_warp_->time_start_) *
-          1600;
-
-      debug_image_pro.at<cv::Vec3b>(pixel.y_, pixel.x_)[2] +=
-          (-pixel.time_stemp_ + frame->undistorted_roation_warp_->time_start_) *
-          1600;
+      debug_image_pro.at<uint8_t>(pixel.y_, pixel.x_) =
+          std::min(static_cast<uint8_t>(
+                       (debug_image_raw.at<uint8_t>(pixel.y_, pixel.x_) + 83)),
+                   static_cast<uint8_t>(255));
+      f_out << std::setprecision(20) << pixel.time_stemp_ << " " << pixel.x_
+            << " " << pixel.y_ << "\n";
     }
+    f_out.close();
     cv::putText(debug_image_pro,
                 "Time(ms) = " +
                     std::to_string(frame->time_for_warp_process_ * 1000),
@@ -101,6 +108,23 @@ int PrintImage(EventKMs<EventRaw>::Ptr raw_event, Frame::Ptr frame) {
                                               point->event_.x_) = color;
       }
     }
+    for (auto cluster : frame->dblines_) {
+      cv::Vec3b color{static_cast<unsigned char>(rng.uniform(0, 255)),
+                      static_cast<unsigned char>(rng.uniform(0, 255)),
+                      static_cast<unsigned char>(rng.uniform(0, 255))};
+      // for (auto point : cluster->result) {
+      //   if (point.y_ < 480 && point.y_ > 0 && point.x_ < 640 && point.x_ > 0)
+      //     debug_image_cluster_line.at<cv::Vec3b>(point.y_, point.x_) = color;
+      // }
+      Eigen::Vector2d line_dir(cluster->line_direction_.y(),
+                               -cluster->line_direction_.x());
+      line_dir.normalize();
+      cv::Point a_point(cluster->mean_.x() + 10 * line_dir.x(),
+                        cluster->mean_.y() + 10 * line_dir.y());
+      cv::Point b_point(cluster->mean_.x() - 10 * line_dir.x(),
+                        cluster->mean_.y() - 10 * line_dir.y());
+      cv::line(debug_image_cluster_line, a_point, b_point, color);
+    }
     cv::putText(debug_image_cluster,
                 "Time(ms) = " +
                     std::to_string(frame->time_for_cluster_process_ * 1000),
@@ -129,6 +153,9 @@ int PrintImage(EventKMs<EventRaw>::Ptr raw_event, Frame::Ptr frame) {
     std::string path_cluster_neg =
         "/mnt/750ssd_1/temp/" +
         std::to_string(frame->undistorted_roation_warp_->time_start_) + "f.png";
+    std::string path_cluster_line =
+        "/mnt/750ssd_1/temp/" +
+        std::to_string(frame->undistorted_roation_warp_->time_start_) + "g.png";
     for (int index = 1; index < HEIGHT / GRID_SIZE; index++) {
       cv::Point left_point(0, index * GRID_SIZE);
       cv::Point right_point(WIDTH, index * GRID_SIZE);
@@ -155,6 +182,7 @@ int PrintImage(EventKMs<EventRaw>::Ptr raw_event, Frame::Ptr frame) {
     // cv::imwrite(path_arrored_neg, debug_image_arrored_neg);
     cv::imwrite(path_cluster, debug_image_cluster);
     cv::imwrite(path_cluster_neg, debug_image_cluster_neg);
+    cv::imwrite(path_cluster_line, debug_image_cluster_line);
   }
 
   return SUCC;
@@ -187,6 +215,7 @@ int main(int argc, char** argv) {
       // frame->GridSegment();
       // frame->GridProcess();
       frame->DBScanSegment();
+      frame->DBScanLineProcess();
 
       PrintImage(imu_event_data->event_, frame) == STATIONARY ? stay_count++ :
                                                                 stay_count = 0;

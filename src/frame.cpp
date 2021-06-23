@@ -19,6 +19,10 @@ int GenMapWarp(const Eigen::Matrix3d intrinsic_mat,
           -fx * (1 + std::pow((u - cx) / fx, 2)), fx * (v - cy) / fy,
           fy * (1 + std::pow((v - cy) / fy, 2)), -(u - cx) * (v - cy) / fx,
           -fy * (u - cx) / fx;
+      float chi = std::sqrt(std::pow(((u - cx) / fx), 2) +
+                            std::pow(((v - cy) / fy), 2) + 1);
+      map_warp.j_trans_ << -fx * chi, 0, (u - cx) * chi, 0, -fy * chi,
+          (v - cy) * chi;
       map[std::make_pair(u, v)] = map_warp;
     }
   }
@@ -57,11 +61,47 @@ int Grid::Process(const Eigen::Vector3d tans) {
   direction_.y() > 0 ? direction_ = direction_ : direction_ = -direction_;
 }
 
+int DBLine::Process(void) {
+  for (auto point : *points_) {
+    sum_x_ += point->event_.x_;
+    sum_y_ += point->event_.y_;
+    sum_suqare_x_ += point->event_.x_ * point->event_.x_;
+    sum_suqare_y_ += point->event_.y_ * point->event_.y_;
+    sum_xy_ += point->event_.x_ * point->event_.y_;
+    sum_xt_ += point->event_.x_ * (point->event_.time_stemp_ - time_stamp_);
+    sum_yt_ += point->event_.y_ * (point->event_.time_stemp_ - time_stamp_);
+    sum_t_ += point->event_.time_stemp_ - time_stamp_;
+  }
+  mean_t = sum_t_ / (*points_).size();
+  mean_ << sum_x_ / (*points_).size(), sum_y_ / (*points_).size();
+  xy_cov_ << sum_suqare_x_ - sum_x_ * mean_.x(), sum_xy_ - sum_x_ * mean_.y(),
+      sum_xy_ - sum_y_ * mean_.x(), sum_suqare_y_ - sum_y_ * mean_.y();
+  xy_t_ << sum_xt_ - sum_x_ * mean_t, sum_yt_ - sum_y_ * mean_t;
+  line_direction_ = xy_cov_.inverse() * xy_t_;
+  line_vec_       = -line_direction_ / std::pow(line_direction_.norm(), 2);
+  std::cout << line_vec_ << std::endl;
+  for (auto point : *points_) {
+    result.emplace_back(EventProcessed(
+        time_stamp_,
+        point->event_.x_ +
+            (point->event_.time_stemp_ - time_stamp_) * line_vec_.x(),
+        point->event_.y_ +
+            (point->event_.time_stemp_ - time_stamp_) * line_vec_.y(),
+        point->event_.polarity_));
+  }
+  return SUCC;
+}
+
 int Frame::WarpRotation(
     const std::unordered_map<uvpair, MapWarp, boost::hash<uvpair>>& map) {
   if (undistorted_roation_warp_ != nullptr) {
     return REPEAT_PROCESS;
   }
+  // std::cout << "imu:" << std::endl
+  //           << cam2imu_ * imu_event_raw_data_->imu_->angular_velocity_
+  //           << std::endl
+  //           << "GT:" << std::endl
+  //           << imu_event_raw_data_->gt_anglular_velocity_ << std::endl;
   undistorted_roation_warp_ = std::make_shared<EventKMs<EventProcessed>>(
       imu_event_raw_data_->event_->time_start_);
   clock_t start, end;
@@ -72,15 +112,16 @@ int Frame::WarpRotation(
         static_cast<float>(imu_event_raw_data_->time_stamp_mid_ -
                            event.time_stemp_) *
         map_pixel.j_rot_ *
+        // Eigen::Vector3f(
+        //     static_cast<float>(imu_event_raw_data_->gt_anglular_velocity_.x()),
+        //     static_cast<float>(imu_event_raw_data_->gt_anglular_velocity_.y()),
+        //     static_cast<float>(imu_event_raw_data_->gt_anglular_velocity_.z()));
         Eigen::Vector3f(static_cast<float>(
                             -imu_event_raw_data_->imu_->angular_velocity_.y()),
                         static_cast<float>(
                             -imu_event_raw_data_->imu_->angular_velocity_.z()),
                         static_cast<float>(
                             imu_event_raw_data_->imu_->angular_velocity_.x()));
-    // std::cout << "imu_:" << std::endl
-    //           << imu_event_raw_data_->imu_->angular_velocity_ << std::endl
-    //           << imu_event_raw_data_->gt_anglular_velocity_ << std::endl;
     float u = warp(0, 0) + map_pixel.x_;
     float v = warp(1, 0) + map_pixel.y_;
     if (u > 0 && v > 0 && u < WIDTH && v < HEIGHT) {
@@ -169,6 +210,19 @@ int Frame::DBScanSegment(void) {
     end = clock();
     time_for_cluster_process_ =
         static_cast<float>(end - start) / CLOCKS_PER_SEC;
+  }
+}
+
+int Frame::DBScanLineProcess(void) {
+  for (auto cluster : cluster_result_pos_) {
+    dblines_.emplace_back(std::make_shared<DBLine>(
+        &cluster, imu_event_raw_data_->time_stamp_mid_));
+    dblines_.back()->Process();
+  }
+  for (auto cluster : cluster_result_neg_) {
+    dblines_.emplace_back(std::make_shared<DBLine>(
+        &cluster, imu_event_raw_data_->time_stamp_mid_));
+    dblines_.back()->Process();
   }
 }
 }  // namespace FrontEnd

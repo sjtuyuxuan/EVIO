@@ -3,8 +3,8 @@
 namespace EVIO {
 namespace FrontEnd {
 
-double time_offset_imu = TIME_OFFSET;
-double time_offset_gt  = TIME_OFFSET;
+double time_offset_imu = TIME_OFFSET_IMU;
+double time_offset_gt  = TIME_OFFSET_GT;
 
 void DataSubscriber::GTCallback(
     const geometry_msgs::PoseStampedConstPtr& gt_msg) {
@@ -131,9 +131,9 @@ bool ImuAlignUnit::CheckData(DataSubscriber& subscriber) {
         return false;
       } else if (event_end_time_.size() < 50 && imu_cache_.size() < 300 &&
                  gt_cache_.size() < 180) {
-        std::cout
-            << "Not initialized! Please LET device STAYIONARY for a while!"
-            << std::endl;
+        std::cout << "Not initialized! Please LET the device be STAYIONARY for "
+                     "a while!"
+                  << std::endl;
         event_end_time_.clear();
         imu_cache_.clear();
         gt_cache_.clear();
@@ -208,19 +208,23 @@ bool ImuAlignUnit::CheckData(DataSubscriber& subscriber) {
   if (imu_in_envlope.empty()) {
     return false;
   }
-  Eigen::Affine3d start_pose;
-  Eigen::Affine3d end_pose;
-  std::cout << gt_manager_->GetPose(subscriber.event_data_.front()->time_start_,
-                                    start_pose)
-            << std::endl;
-  gt_manager_->GetPose(subscriber.event_data_.front()->time_end_, end_pose);
-  Eigen::Affine3d delta_pose = start_pose.inverse() * end_pose;
-  // std::cout << start_pose.rotation() << std::endl;
-  Eigen::AngleAxisd rot(delta_pose.rotation());
-  Eigen::Vector3d angular_velocity =
-      rot.axis() * rot.angle() * 1e3 / ENVELOPE_K;
-  Eigen::Vector3d linear_velocity = delta_pose.translation() * 1e3 / ENVELOPE_K;
-
+  Eigen::Vector3d angular_velocity = Eigen::Vector3d::Zero();
+  Eigen::Vector3d linear_velocity  = Eigen::Vector3d::Zero();
+  if (USE_GT) {
+    Eigen::Affine3d start_pose;
+    Eigen::Affine3d end_pose;
+    if (gt_manager_->GetPose(subscriber.event_data_.front()->time_start_,
+                             start_pose) == SUCC &&
+        gt_manager_->GetPose(subscriber.event_data_.front()->time_end_,
+                             end_pose) == SUCC) {
+      Eigen::Affine3d delta_pose = start_pose.inverse() * end_pose;
+      Eigen::AngleAxisd rot(delta_pose.rotation());
+      angular_velocity = rot.axis() * rot.angle() * 1e3 / ENVELOPE_K;
+      linear_velocity  = delta_pose.translation() * 1e3 / ENVELOPE_K;
+    } else {
+      return false;
+    }
+  }
   subscriber.event_data_.front()->DownSample();
   auto imu_event_data =
       std::make_shared<ImuEventData>(subscriber.event_data_.front(),

@@ -165,6 +165,14 @@ class PoseManager {
 
   int GetPose(const double time_stamp, Eigen::Affine3d& pose);
 
+  double GetLastTime(void) {
+    return lateset_time_;
+  }
+
+  double GetOldTime(void) {
+    return oldest_time_;
+  }
+
  private:
   std::vector<GTData::Ptr> pose_;
   double lateset_time_;

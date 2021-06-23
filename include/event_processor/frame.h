@@ -170,20 +170,40 @@ class DBScan {
   std::vector<DBPoint::Ptr> dbpoint_list_;
 };
 
-struct DBLine
-{
-  int size            = 0;
-  float sum_x_        = 0;
-  float sum_y_        = 0;
-  float sum_suqare_x_ = 0;
-  float sum_suqare_y_ = 0;
-  float sum_xy_       = 0;
+class DBLine {
+ public:
+  using Ptr = std::shared_ptr<DBLine>;
 
-  Eigen::Vector2f meam;
-  float length;
-  cv::Point2f point_1;
-  cv::Point2f point_2;
+  std::vector<EventProcessed> result;
+  Eigen::Vector2d line_direction_;
+  Eigen::Vector2d line_vec_;
+  float mean_t;
+  Eigen::Vector2d mean_;
+
+  DBLine() = delete;
+  DBLine(std::vector<DBPoint::Ptr>* points, double time_stamp)
+      : points_(points), time_stamp_(time_stamp) {}
+
+  int Process(void);
+
+ private:
+  std::vector<DBPoint::Ptr>* points_;
+
+  double time_stamp_;
+  int size             = 0;
+  double sum_x_        = 0;
+  double sum_y_        = 0;
+  double sum_suqare_x_ = 0;
+  double sum_suqare_y_ = 0;
+  double sum_xy_       = 0;
+  double sum_xt_       = 0;
+  double sum_yt_       = 0;
+  double sum_t_        = 0;
+
+  Eigen::Matrix2d xy_cov_;
+  Eigen::Vector2d xy_t_;
 };
+using DBLines = std::vector<std::shared_ptr<DBLine>>;
 
 class Frame {
  public:
@@ -210,7 +230,7 @@ class Frame {
 
   int DBScanSegment(void);
 
-  int DBScanLineDetct(void);
+  int DBScanLineProcess(void);
 
   EventKMs<EventProcessed>::Ptr undistorted_roation_warp_ = nullptr;
   EventKMs<EventProcessed>::Ptr undistorted_all_warp_     = nullptr;
@@ -219,6 +239,7 @@ class Frame {
   ClusterVector cluster_result_;
   ClusterVector cluster_result_pos_;
   ClusterVector cluster_result_neg_;
+  DBLines dblines_;
 
   float time_for_grid_process_;
   float time_for_cluster_process_;
